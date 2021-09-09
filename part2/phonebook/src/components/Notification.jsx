@@ -5,8 +5,8 @@ const Notification = ({ noti }) => {
     <>
       {' '}
       {noti !== '' ? (
-        <div style={noti === 'User Already Deleted' ? { color: 'red' } : { color: '#85e25a' }}>
-          {noti}
+        <div style={noti.type === 'error' ? { color: 'red' } : { color: '#85e25a' }}>
+          {noti.message}
         </div>
       ) : null}
     </>

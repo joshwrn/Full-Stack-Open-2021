@@ -21,48 +21,59 @@ const App = () => {
     setNewNumber(e.target.value);
   };
 
-  const handleAdd = (e) => {
+  //$ add
+  const handleAdd = async (e) => {
     e.preventDefault();
     const personObject = {
       name: newName,
       number: newNumber,
     };
-    const found = persons.find((person) => person.name === newName);
+    // const found = await personService.getOne(newName);
+    const found = persons.find((p) => p.name === newName);
     if (found) {
       personService.update(found.id, personObject).then((returned) => {
         setPersons(persons.map((person) => (person.id !== found.id ? person : returned)));
         setNewName('');
         setNewNumber('');
-        setNoti('User Updated');
+        setNoti({ type: 'success', message: 'User Updated' });
       });
     } else {
       //$ send to server
-      personService.create(personObject).then((returned) => {
-        setPersons(persons.concat(returned));
-        setNewName('');
-        setNewNumber('');
-        setNoti('User Added');
-      });
+      personService
+        .create(personObject)
+        .then((returned) => {
+          setPersons(persons.concat(returned));
+          setNewName('');
+          setNewNumber('');
+          setNoti({ type: 'success', message: 'User Added' });
+        })
+        .catch((err) => {
+          console.log(err.response.data);
+          setNoti({ type: 'error', message: err.response.data.error });
+        });
     }
   };
 
+  //$ search
   const handleSearch = (e) => {
     setSearch(e.target.value);
   };
 
+  //! delete
   const handleDelete = (id) => {
     personService
       .remove(id)
       .then((response) => {
         const remove = persons.filter((person) => person.id !== id);
         setPersons(remove);
-        setNoti('User Deleted');
+        setNoti({ type: 'success', message: 'User Deleted' });
       })
       .catch((error) => {
-        setNoti('User Already Deleted');
+        setNoti({ type: 'error', message: 'User Already Deleted' });
       });
   };
 
+  //$ notification timer
   useEffect(() => {
     if (noti === '') return;
     const timer = setTimeout(() => {
@@ -71,12 +82,14 @@ const App = () => {
     return () => clearTimeout(timer);
   }, [noti]);
 
+  //$ return search results
   useEffect(() => {
     if (search === '') return setFiltered([]);
     const newFilter = persons.filter((person) => person.name.toLowerCase().includes(search));
     setFiltered(newFilter);
   }, [search, persons]);
 
+  //$ Get all persons on load
   useEffect(() => {
     personService.getAll().then((initial) => {
       setPersons(initial);
