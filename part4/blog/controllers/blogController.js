@@ -53,9 +53,16 @@ blogRouter.post('/', async (req, res) => {
 //! delete
 blogRouter.post('/:id/delete', async (req, res) => {
   const token = req.token;
-  const find = Blog.findById(req.params.id);
-  if (find.user.toString() !== token.toString()) {
+  const decodedToken = jwt.verify(token, process.env.SECRET);
+  if (!token || !decodedToken.id) {
     return response.status(401).json({ error: 'token missing or invalid' });
+  }
+
+  const userId = req.body.user;
+  const find = await Blog.findById(req.params.id);
+  console.log(req.body);
+  if (find.user.toString() !== userId) {
+    return res.status(401).json({ error: 'token missing or invalid' });
   }
   const remove = await Blog.findByIdAndRemove(req.params.id);
   res.status(204).json(remove);
@@ -63,9 +70,9 @@ blogRouter.post('/:id/delete', async (req, res) => {
 
 //# update
 blogRouter.post('/:id/like', async function (req, res, next) {
-  const before = await Blog.findOne({ id: req.params.id }).exec();
+  const before = await Blog.findOne({ _id: req.params.id }).exec();
   let blog = await Blog.findOneAndUpdate(
-    { id: req.params.id },
+    { _id: req.params.id },
     { likes: before.likes + 1 }
   );
   res.status(204).json(blog);

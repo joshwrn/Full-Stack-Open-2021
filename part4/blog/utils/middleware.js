@@ -40,8 +40,7 @@ const tokenExtractor = (request, response, next) => {
 };
 
 const userExtractor = async (req, res, next) => {
-  console.log('req', req.body);
-
+  if (!req.body.username) return next();
   const user = await User.find({ username: req.body.username });
   req.user = user._id;
   next();
