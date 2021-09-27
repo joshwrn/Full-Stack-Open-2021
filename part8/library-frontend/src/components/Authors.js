@@ -14,7 +14,14 @@ const Authors = ({ show, setError }) => {
   });
   const [selectedAuthor, setAuthor] = useState('');
   const [bornString, setBorn] = useState('');
+  const [authors, setAuthors] = useState([]);
   const result = useQuery(ALL_AUTHORS);
+
+  useEffect(() => {
+    if (result.loading) return;
+    console.log('authors:', result.data);
+    setAuthors(result.data.allAuthors);
+  }, [result]);
 
   if (!show) {
     return null;
@@ -38,8 +45,6 @@ const Authors = ({ show, setError }) => {
 
     setBorn('');
   };
-
-  const authors = result.data.allAuthors;
 
   return (
     <div>

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useMutation } from '@apollo/client';
 import { ALL_BOOKS, ADD_BOOK } from '../queries';
 
-const NewBook = ({ setError, show }) => {
+const NewBook = ({ setError, show, updateCacheWith }) => {
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [publishedBefore, setPublished] = useState('');
@@ -15,14 +15,7 @@ const NewBook = ({ setError, show }) => {
       setError(error.graphQLErrors[0]?.message);
     },
     update: (store, response) => {
-      const dataInStore = store.readQuery({ query: ALL_BOOKS });
-      store.writeQuery({
-        query: ALL_BOOKS,
-        data: {
-          ...dataInStore,
-          allBooks: [...dataInStore.allBooks, response.data.addBook],
-        },
-      });
+      updateCacheWith(response.data.addBook);
     },
   });
 

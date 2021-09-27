@@ -28,6 +28,22 @@ export const ALL_BOOKS = gql`
 `;
 // author caused an issue
 
+export const BOOK_ADDED = gql`
+  subscription {
+    bookAdded {
+      title
+      author {
+        id
+        name
+        born
+      }
+      published
+      id
+      genres
+    }
+  }
+`;
+
 export const REC = gql`
   query findByGenre($allBooksGenre: String!) {
     allBooks(genre: $allBooksGenre) {

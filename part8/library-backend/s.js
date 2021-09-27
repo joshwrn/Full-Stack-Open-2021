@@ -3,7 +3,14 @@ const {
   UserInputError,
   AuthenticationError,
   gql,
-} = require('apollo-server');
+} = require('apollo-server-express');
+const { ApolloServerPluginDrainHttpServer } = require('apollo-server-core');
+const express = require('express');
+const http = require('http');
+const { createServer } = require('http');
+const { execute, subscribe } = require('graphql');
+const { SubscriptionServer } = require('subscriptions-transport-ws');
+const { makeExecutableSchema } = require('@graphql-tools/schema');
 const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
 const jwt = require('jsonwebtoken');
@@ -12,6 +19,9 @@ const User = require('./models/user');
 const Author = require('./models/author');
 const Book = require('./models/book');
 const mongoose = require('mongoose');
+
+const { PubSub } = require('graphql-subscriptions');
+const pubsub = new PubSub();
 
 console.log(process.env.MONGODB_URI);
 
@@ -77,6 +87,10 @@ const typeDefs = gql`
     allAuthors: [Author!]!
     me: User
   }
+
+  type Subscription {
+    bookAdded: Book!
+  }
 `;
 // the query type is where you connect the resolve to the actual objects i believe
 
@@ -102,9 +116,6 @@ const resolvers = {
       return context.currentUser;
     },
   },
-  Author: {
-    bookCount: (root) => books.filter((b) => b.author === root.name).length,
-  },
   Mutation: {
     addBook: async (root, args) => {
       const book = new Book({
@@ -115,15 +126,22 @@ const resolvers = {
       const found = await Author.findOne({ name: args.author });
       console.log('found', found);
       if (!found) {
-        const author = new Author({ name: args.author });
+        const author = new Author({ name: args.author, bookCount: 1 });
+        console.log(author);
         await author.save();
         const got = await Author.findOne({ name: args.author });
         console.log('new author', got);
         book.author = got;
       } else if (found) {
         book.author = found;
+        await Author.findOneAndUpdate(
+          { name: args.author },
+          { $inc: { bookCount: 1 } }
+        );
       }
       await book.save();
+      pubsub.publish('BOOK_ADDED', { bookAdded: book });
+
       return book;
     },
     editAuthor: (root, args) => {
@@ -159,22 +177,77 @@ const resolvers = {
       return { value: jwt.sign(userForToken, JWT_SECRET) };
     },
   },
+  Subscription: {
+    bookAdded: {
+      subscribe: () => pubsub.asyncIterator(['BOOK_ADDED']),
+    },
+  },
 };
 
-const server = new ApolloServer({
-  typeDefs,
-  resolvers,
-  context: async ({ req }) => {
-    const auth = req ? req.headers.authorization : null;
-    if (auth && auth.toLowerCase().startsWith('bearer ')) {
-      const decodedToken = jwt.verify(auth.substring(7), JWT_SECRET);
-      const currentUser = await User.findById(decodedToken.id);
-      console.log('logged in');
-      return { currentUser };
-    }
-  },
-});
+//$ new
+async function startApolloServer() {
+  // Required logic for integrating with Express
+  const app = express();
+  const httpServer = createServer(app);
 
-server.listen().then(({ url }) => {
-  console.log(`Server ready at ${url}`);
-});
+  const schema = makeExecutableSchema({ typeDefs, resolvers });
+
+  // Same ApolloServer initialization as before, plus the drain plugin.
+  const server = new ApolloServer({
+    schema,
+    plugins: [
+      ApolloServerPluginDrainHttpServer({ httpServer }),
+      {
+        async serverWillStart() {
+          return {
+            async drainServer() {
+              subscriptionServer.close();
+            },
+          };
+        },
+      },
+    ],
+    context: async ({ req }) => {
+      const auth = req ? req.headers.authorization : null;
+      if (auth && auth.toLowerCase().startsWith('bearer ')) {
+        const decodedToken = jwt.verify(auth.substring(7), JWT_SECRET);
+        const currentUser = await User.findById(decodedToken.id);
+        console.log('logged in');
+        return { currentUser };
+      }
+    },
+  });
+
+  const subscriptionServer = SubscriptionServer.create(
+    {
+      // This is the `schema` we just created.
+      schema,
+      // These are imported from `graphql`.
+      execute,
+      subscribe,
+    },
+    {
+      // This is the `httpServer` we created in a previous step.
+      server: httpServer,
+      // This `server` is the instance returned from `new ApolloServer`.
+      path: server.graphqlPath,
+    }
+  );
+
+  // More required logic for integrating with Express
+  await server.start();
+  server.applyMiddleware({
+    app,
+
+    // By default, apollo-server hosts its GraphQL endpoint at the
+    // server root. However, *other* Apollo Server packages host it at
+    // /graphql. Optionally provide this to match apollo-server.
+    path: '/',
+  });
+
+  // Modified server startup
+  await new Promise((resolve) => httpServer.listen({ port: 4000 }, resolve));
+  console.log(`🚀 Server ready at http://localhost:4000${server.graphqlPath}`);
+}
+
+startApolloServer();
